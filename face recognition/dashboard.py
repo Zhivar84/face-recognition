@@ -16,7 +16,7 @@ if hasattr(sys.stdout, "reconfigure"):
 
 import cv2
 import numpy as np
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, make_response, request, send_from_directory
 
 import database as db
 import engine
@@ -49,25 +49,20 @@ PAGE = """<!doctype html>
   body{margin:0;background:var(--bg);color:var(--ink);
     font-family:Vazirmatn FD,Vazirmatn,Tahoma,'Segoe UI',sans-serif;font-size:14px}
   header{background:var(--card);border-bottom:1px solid var(--line);padding:14px 28px;
-    display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;position:sticky;top:0;z-index:5;
-    transition:box-shadow .2s ease}
-  header.scrolled{box-shadow:0 6px 16px rgba(16,24,40,.07)}
+    display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;position:sticky;top:0;z-index:5}
   .brand{display:flex;align-items:center;gap:10px}
   .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--green-dot);
     box-shadow:0 0 0 4px var(--green)}
   .brand h1{font-size:16px;font-weight:800;margin:0}
   .brand span{color:var(--muted);font-size:12px}
-  .hgroup{display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
-  .hmeta{display:flex;flex-direction:column;align-items:flex-start;gap:2px}
-  #clock{color:var(--muted);font-size:12.5px;direction:ltr}
+  .hgroup{display:flex;gap:12px;align-items:center}
+  #clock{color:var(--muted);font-size:12.5px;direction:ltr;text-align:right}
   input[type=date]{font:inherit;font-size:13px;padding:7px 12px;border:1px solid var(--line);
     border-radius:10px;background:var(--card);color:var(--ink);box-shadow:var(--shadow)}
   main{max-width:1120px;margin:0 auto;padding:26px 20px;display:grid;gap:18px}
   .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}
   .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
-    padding:16px 18px;box-shadow:var(--shadow);display:flex;justify-content:space-between;align-items:center;
-    transition:transform .18s ease,box-shadow .18s ease}
-  .card:hover{transform:translateY(-2px);box-shadow:0 2px 4px rgba(16,24,40,.06),0 10px 24px rgba(16,24,40,.08)}
+    padding:16px 18px;box-shadow:var(--shadow);display:flex;justify-content:space-between;align-items:center}
   .card .label{color:var(--muted);font-size:12px;margin-bottom:4px}
   .card .value{font-size:26px;font-weight:800;letter-spacing:-.5px}
   .ic{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;flex-shrink:0}
@@ -81,16 +76,12 @@ PAGE = """<!doctype html>
   .panel{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
     padding:18px 20px;box-shadow:var(--shadow)}
   .panel h2{font-size:14px;font-weight:800;margin:0 0 14px;display:flex;align-items:center;gap:8px}
-  .panel h2 .ic{width:28px;height:28px;border-radius:9px}
-  .panel h2 .ic svg{width:15px;height:15px}
   .panel h2 .count{background:var(--soft);border:1px solid var(--line);color:var(--muted);
     border-radius:999px;font-size:11.5px;padding:1px 9px;font-weight:600}
   table{width:100%;border-collapse:collapse;font-size:13px}
   th,td{padding:9px 10px;text-align:right;border-bottom:1px solid var(--soft)}
   tr:last-child td{border-bottom:none}
-  th{color:var(--muted);font-weight:600;font-size:11.5px;background:var(--card);
-    position:sticky;top:70px;z-index:2;border-bottom:1px solid var(--line)}
-  tbody tr:nth-child(even){background:#fafcfe}
+  th{color:var(--muted);font-weight:600;font-size:11.5px;background:var(--card)}
   tbody tr:hover{background:var(--soft)}
   td.num{direction:ltr;text-align:right;font-variant-numeric:tabular-nums}
   .chip{display:inline-flex;align-items:center;gap:5px;padding:2px 10px;border-radius:999px;
@@ -121,12 +112,10 @@ PAGE = """<!doctype html>
   .legend{display:flex;gap:16px;color:var(--muted);font-size:11.5px;margin-top:10px}
   .legend i{width:10px;height:10px;border-radius:3px;display:inline-block;margin-left:5px}
   .btn{font:inherit;font-size:13px;font-weight:600;border:1px solid var(--line);background:var(--card);
-    color:var(--ink);border-radius:10px;padding:8px 16px;cursor:pointer;box-shadow:var(--shadow);
-    white-space:nowrap;transition:transform .12s ease,border-color .15s ease,background .15s ease}
+    color:var(--ink);border-radius:10px;padding:8px 16px;cursor:pointer;box-shadow:var(--shadow)}
   .btn:hover{border-color:#cfd8e3}
-  .btn:active{transform:translateY(1px)}
-  .btn.primary{background:linear-gradient(180deg,#358a59,#2f7d51);border-color:var(--green-ink);color:#fff}
-  .btn.primary:hover{background:linear-gradient(180deg,#2f7d51,#276b45)}
+  .btn.primary{background:var(--green-ink);border-color:var(--green-ink);color:#fff}
+  .btn.primary:hover{background:#276b45}
   .btn.tiny{padding:4px 11px;font-size:12px;border-radius:8px;box-shadow:none}
   .btn.danger{color:var(--red-ink);background:var(--red);border-color:#f2d9d9}
   td.act{white-space:nowrap}
@@ -134,7 +123,7 @@ PAGE = """<!doctype html>
   .backdrop{position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;place-items:center;z-index:20;padding:20px}
   .backdrop.on{display:grid}
   .modal{background:var(--card);border-radius:var(--radius);box-shadow:0 20px 50px rgba(16,24,40,.25);
-    width:min(460px,100%);padding:22px 24px}
+    width:min(460px,100%);padding:22px 24px;max-height:calc(100vh - 40px);overflow:auto}
   .modal h3{margin:0 0 4px;font-size:15.5px;font-weight:800}
   .modal .hint{margin:0 0 16px;color:var(--muted);font-size:12px;line-height:1.8}
   .field{margin-bottom:12px}
@@ -190,34 +179,73 @@ PAGE = """<!doctype html>
   .switch{display:flex;gap:7px;align-items:center;font-size:13px;font-weight:700;
     background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:8px 12px;height:36px;cursor:pointer}
   .panel .hint{color:var(--muted);font-size:12px;margin:12px 0 0;line-height:1.9}
-  .photobox{display:flex;gap:14px;align-items:center}
-  .preview{width:86px;height:86px;border-radius:14px;border:1px dashed #cfd8e3;background:var(--soft);
-    display:grid;place-items:center;overflow:hidden;flex-shrink:0;color:var(--muted);font-size:11px;text-align:center;padding:4px}
+  .drop{display:flex;gap:14px;align-items:center;border:1px dashed #cfd8e3;border-radius:14px;
+    background:var(--soft);padding:12px;transition:.2s}
+  .drop.over{border-color:var(--green-dot);background:#eef7f1}
+  .preview{width:104px;height:104px;border-radius:14px;border:1px solid var(--line);background:var(--card);
+    display:grid;place-items:center;overflow:hidden;flex-shrink:0;color:var(--muted);font-size:11px;text-align:center;padding:4px;
+    position:relative}
   .preview img{width:100%;height:100%;object-fit:cover;display:block}
-  .pbtns{display:flex;flex-wrap:wrap;gap:7px}
+  .preview .badge{position:absolute;bottom:0;right:0;left:0;background:rgba(15,23,42,.72);color:#fff;
+    font-size:10.5px;padding:3px 0;text-align:center}
+  .pbtns{display:flex;flex-direction:column;gap:7px;flex:1}
+  .pbtns .btn{width:100%}
   .pnote{color:var(--muted);font-size:11.5px;margin:8px 0 0;line-height:1.8}
+  .fstat{display:none;align-items:center;gap:8px;font-size:12px;font-weight:700;border-radius:10px;
+    padding:8px 11px;margin:10px 0 0;line-height:1.6}
+  .fstat.on{display:flex}
+  .fstat i{width:9px;height:9px;border-radius:50%;background:currentColor;flex-shrink:0}
+  .fstat.ok{background:var(--green);color:var(--green-ink)}
+  .fstat.warn{background:var(--amber);color:var(--amber-ink)}
+  .fstat.bad{background:var(--red);color:var(--red-ink)}
+  .fstat.busy{background:var(--blue);color:var(--blue-ink)}
   .thumb{width:32px;height:32px;border-radius:9px;object-fit:cover;display:block;background:var(--soft)}
   td.pic{width:44px}
   .cammodal{width:min(560px,100%)}
-  #camVideo{width:100%;max-height:56vh;background:#0f172a;border-radius:12px;display:block;
+  .camstage{position:relative}
+  #camVideo,#camShotImg{width:100%;max-height:56vh;background:#0f172a;border-radius:12px;display:block;
     aspect-ratio:4/3;object-fit:cover}
+  #camShotImg{display:none}
+  .camstage.on-shot #camVideo{display:none}
+  .camstage.on-shot #camShotImg{display:block}
+  .guide{position:absolute;inset:0;pointer-events:none;display:grid;place-items:center}
+  .guide span{width:52%;aspect-ratio:3/4;border:2px dashed rgba(255,255,255,.75);border-radius:50%}
+  .camstage.on-shot .guide{display:none}
+  #camVideo{transform:scaleX(-1)}
   .camhint{margin:0 0 10px;color:var(--muted);font-size:12px;line-height:1.8;min-height:20px}
+  .camstep{margin:0 0 8px;font-size:12.5px;font-weight:700;line-height:1.8}
+  .camstep b{font-size:13.5px}
+  .pose{position:absolute;top:8px;right:8px;left:8px;text-align:center;pointer-events:none;
+    background:rgba(15,23,42,.82);color:#fff;font-size:15px;font-weight:700;padding:9px 12px;
+    border-radius:10px;line-height:1.7}
+  .camstage.on-shot .pose{display:none}
+  .shots{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+  .shots:empty{display:none}
+  .shot{width:76px;font-size:10.5px;color:var(--muted);text-align:center;line-height:1.6}
+  .shot img{width:76px;height:57px;object-fit:cover;border-radius:9px;display:block;border:2px solid var(--line)}
+  .shot.good img{border-color:#2fae6b}
+  .shot.bad img{border-color:#e05b5b}
+  .camrow{display:flex;gap:8px;margin-top:12px}
+  .camrow .btn{flex:1}
+  .live{position:absolute;bottom:8px;right:8px;display:flex;align-items:center;gap:7px;
+    background:rgba(15,23,42,.82);color:#fff;font-size:11.5px;font-weight:700;padding:5px 11px;border-radius:999px}
+  .live i{width:9px;height:9px;border-radius:50%;background:#ff5a5a;animation:blink 1.1s infinite}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+  .dots{display:flex;gap:6px;justify-content:center;margin:4px 0 12px;flex-wrap:wrap}
+  .dots b{display:flex;flex-direction:column;align-items:center;gap:5px;font-size:10.5px;
+    font-weight:600;color:var(--muted);flex:1;min-width:68px}
+  .dots b i{width:100%;height:5px;border-radius:999px;background:var(--line);display:block}
+  .dots b.done{color:var(--green-ink)} .dots b.done i{background:#2fae6b}
+  .dots b.cur{color:var(--blue-ink)} .dots b.cur i{background:var(--blue)}
+  .autoline{display:flex;align-items:flex-start;gap:7px;font-size:11.5px;color:var(--muted);
+    margin-top:10px;line-height:1.7;cursor:pointer}
+  .autoline input{margin-top:2px}
   .files{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
   .files a{font-size:12px;font-weight:600;color:var(--blue-ink);background:var(--blue);
     border:1px solid #d7e5f3;border-radius:9px;padding:5px 11px;text-decoration:none;direction:ltr}
   .files a:hover{background:#dceaf7}
   .files .none{color:var(--muted);font-size:12px;font-weight:400}
   .switch input{width:15px;height:15px}
-  button:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid var(--green-dot);
-    outline-offset:2px;border-radius:8px}
-  .upd{color:var(--muted);font-size:11.5px;display:flex;align-items:center;gap:6px}
-  .upd::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--green-dot)}
-  .upd.stale::before{background:var(--red-ink)}
-  .col b{font-size:10.5px;color:var(--muted);font-weight:600}
-  @media (prefers-reduced-motion: reduce){
-    *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;
-      transition-duration:.01ms !important}
-  }
 </style>
 </head>
 <body>
@@ -233,29 +261,26 @@ PAGE = """<!doctype html>
       <button class="daybtn" id="dayBtn" type="button" onclick="toggleCal(event)">—</button>
       <div class="cal" id="cal" onclick="event.stopPropagation()"></div>
     </div>
-    <div class="hmeta">
-      <span id="clock"></span>
-      <span class="sub-fa" id="updated" title="آخرین بار داده‌ها چه زمانی تازه شد"></span>
-    </div>
+    <span id="clock"></span>
   </div>
 </header>
 <main>
-  <div class="offline" id="offline" role="alert">اتصال به سرور قطع است — با `.venv\\Scripts\\python dashboard.py` دوباره اجرا کنید</div>
+  <div class="offline" id="offline">اتصال به سرور قطع است — با `.venv\\Scripts\\python dashboard.py` دوباره اجرا کنید</div>
   <section class="cards" id="cards"></section>
   <section class="grid2">
     <div class="panel">
-      <h2><span class="ic green"><svg fill="none" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l9-9 9 9M5 10v10a1 1 0 0 0 1 1h3v-6h6v6h3a1 1 0 0 0 1-1V10"/></svg></span>الان داخل هستند <span class="count" id="insideCount">—</span></h2>
+      <h2>الان داخل هستند <span class="count" id="insideCount">—</span></h2>
       <div id="inside"></div>
     </div>
     <div class="panel">
-      <h2><span class="ic blue"><svg fill="none" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 20V10m8 10V4m8 16v-8"/></svg></span>نمای ساعتی ورود</h2>
+      <h2>نمای ساعتی ورود</h2>
       <div class="chart" id="chart"></div>
       <div class="legend"><span><i style="background:var(--green)"></i>بیشترین تردد</span>
         <span><i style="background:var(--blue)"></i>سایر ساعت‌ها</span></div>
     </div>
   </section>
   <section class="panel">
-    <h2><span class="ic amber"><svg fill="none" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 2m6-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/></svg></span>ساعت مجاز ورود و خروج <span class="sub-fa" id="hoursState">—</span></h2>
+    <h2>ساعت مجاز ورود و خروج <span class="sub-fa" id="hoursState">—</span></h2>
     <div class="hours">
       <label class="switch"><input type="checkbox" id="hEnabled"> فعال‌سازی</label>
       <div class="hfield"><label>ورود از</label><input type="time" id="hInStart"></div>
@@ -267,11 +292,11 @@ PAGE = """<!doctype html>
     <p class="hint">هر رویداد بیرون از این بازه‌ها «مشکوک» علامت می‌خورد. بازه‌ای که از نیمه‌شب می‌گذرد هم پشتیبانی می‌شود (مثلاً ۲۲:۰۰ تا ۰۲:۰۰). این تنظیم روی رویدادهای ثبت‌شده هم اعمال می‌شود.</p>
   </section>
   <section class="panel">
-    <h2><span class="ic blue"><svg fill="none" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg></span>رویدادهای روز <span class="sub-fa" id="evtDay"></span><span class="count" id="evtCount">—</span></h2>
+    <h2>رویدادهای روز <span class="sub-fa" id="evtDay"></span><span class="count" id="evtCount">—</span></h2>
     <div id="events"></div>
   </section>
   <section class="panel">
-    <h2><span class="ic green"><svg fill="none" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v11m0 0l-4-4m4 4l4-4M4 20h16"/></svg></span>گزارش اکسل آخر شب <span class="sub-fa" id="eodState">—</span></h2>
+    <h2>گزارش اکسل آخر شب <span class="sub-fa" id="eodState">—</span></h2>
     <div class="hours">
       <label class="switch"><input type="checkbox" id="eodEnabled"> ساخت خودکار</label>
       <div class="hfield"><label>ساعت</label><input type="time" id="eodTime"></div>
@@ -282,7 +307,27 @@ PAGE = """<!doctype html>
     <div class="files" id="reports"></div>
   </section>
   <section class="panel">
-    <h2><span class="ic blue"><svg fill="none" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-1a4 4 0 0 0-4-4h-4a4 4 0 0 0-4 4v1M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8m8 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6M3 20v-1a4 4 0 0 1 4-4h2"/></svg></span>گالری چهره‌ها و اطلاعات دانشجویان <span class="count" id="stCount">—</span></h2>
+    <h2>تست تشخیص چهره <span class="sub-fa">با عکس یا ویدیوی خودتان بررسی کنید سیستم چه کسی را می‌شناسد</span></h2>
+    <div class="drop" id="testDrop">
+      <div class="preview" id="testPreview">بدون عکس</div>
+      <div class="pbtns">
+        <button type="button" class="btn tiny" onclick="document.getElementById('tFile').click()">انتخاب فایل (عکس یا ویدیو)</button>
+        <button type="button" class="btn tiny" onclick="openCam('test')">ضبط زنده با وب‌کم</button>
+        <button type="button" class="btn primary" id="tRun" onclick="runTest()">تست تشخیص با این عکس</button>
+        <input type="file" id="tFile" accept="image/*,video/*" hidden onchange="pickTest(this)">
+        <label class="hfield" style="margin-top:2px"><label>آستانه تشخیص (پیش‌فرض ۰.۴۰)</label>
+          <input type="number" id="tThr" min="0.05" max="0.95" step="0.05" value="0.40"></label>
+      </div>
+    </div>
+    <p class="fstat" id="tStat"><i></i><span id="tStatText"></span></p>
+    <p class="pnote">این تست همان مسیری است که <span style="direction:ltr;display:inline-block">monitor.py</span> می‌رود: چهره در عکس پیدا می‌شود، بردار ۵۱۲بعدی ساخته می‌شود و با گالری <span style="direction:ltr;display:inline-block">data/embeddings.npz</span> مقایسه می‌شود. اگر اینجا شما را نشناسد، در دوربین زنده هم شما را نمی‌شناسد. با وب‌کم می‌توانید چهار حالت چهره را به‌صورت زنده تست کنید؛ نتیجه هر حالت جداگانه نشان داده می‌شود.</p>
+    <div class="hours" style="margin-top:12px">
+      <button class="btn" onclick="checkGallery()">اعتبارسنجی گالری (همه دانشجویان)</button>
+    </div>
+    <div id="galleryCheck"></div>
+  </section>
+  <section class="panel">
+    <h2>گالری چهره‌ها و اطلاعات دانشجویان <span class="count" id="stCount">—</span></h2>
     <div id="students"></div>
   </section>
 </main>
@@ -303,17 +348,19 @@ PAGE = """<!doctype html>
       <div class="field"><label for="fPhone">شماره تماس</label>
         <input id="fPhone" class="ltr" type="tel" placeholder="09120000000"></div>
       <div class="field">
-        <label>عکس دانشجو</label>
-        <div class="photobox">
+        <label>عکس یا ویدیوی دانشجو</label>
+        <div class="drop" id="drop">
           <div class="preview" id="preview">بدون عکس</div>
           <div class="pbtns">
-            <button type="button" class="btn tiny" onclick="document.getElementById('fFile').click()">آپلود فایل عکس</button>
-            <button type="button" class="btn tiny" onclick="openCam()">عکس با دوربین</button>
-            <button type="button" class="btn tiny danger" onclick="clearPhoto()">حذف عکس</button>
-            <input type="file" id="fFile" accept="image/*" hidden onchange="pickFile(this)">
+            <button type="button" class="btn tiny" onclick="document.getElementById('fFile').click()">۱. انتخاب فایل (عکس یا ویدیو)</button>
+            <button type="button" class="btn tiny" onclick="openCam('form')">۲. ضبط زنده با وب‌کم (۴ حالت چهره)</button>
+            <button type="button" class="btn tiny danger" id="pClear" onclick="clearPhoto()">حذف عکس</button>
+            <input type="file" id="fFile" accept="image/*,video/*" hidden onchange="pickFile(this)">
           </div>
         </div>
-        <p class="pnote" id="pNote">اگر عکس آماده دارید فایلش را بدهید، اگر نه با «عکس با دوربین» همین‌جا بگیرید. عکس ذخیره می‌شود و چهره‌اش خودکار به گالری تشخیص افزوده می‌شود تا دانشجو بدون enroll.py هم شناسایی شود.</p>
+        <div class="shots" id="formShots"></div>
+        <p class="fstat" id="fstat"><i></i><span id="fstatText"></span></p>
+        <p class="pnote" id="pNote">عکس یا ویدیو را اینجا بکشید (drag &amp; drop) یا از دکمه‌ها استفاده کنید. از ویدیو چند فریم برداشته می‌شود و فقط فریم‌های با چهره واضح به گالری می‌روند. در «ضبط زنده با وب‌کم» چهار حالت چهره با راهنمای روی صفحه گرفته می‌شود (رو به دوربین، کمی چپ، کمی راست، کمی بالا) و هر چهار بردار ثبت می‌شود — تشخیص با دوربین دقیق‌تر می‌شود.</p>
       </div>
       <div class="row">
         <button type="submit" class="btn primary" id="mSave">ذخیره</button>
@@ -324,17 +371,31 @@ PAGE = """<!doctype html>
 </div>
 <div class="backdrop" id="camBackdrop" onclick="if(event.target===this)closeCam()">
   <div class="modal cammodal">
-    <h3>عکس با دوربین</h3>
-    <p class="camhint" id="camHint">در حال راه‌اندازی دوربین…</p>
-    <video id="camVideo" playsinline muted></video>
-    <div class="row">
-      <button type="button" class="btn primary" id="camShot" onclick="captureCam()" disabled>ثبت عکس</button>
-      <button type="button" class="btn" onclick="closeCam()">بستن</button>
+    <h3 id="camTitle">ضبط چهره با وب‌کم</h3>
+    <div class="dots" id="camDots"></div>
+    <p class="camstep" id="camStep"></p>
+    <div class="camstage" id="camStage">
+      <video id="camVideo" playsinline muted></video>
+      <img id="camShotImg" alt="آخرین نمونه ثبت‌شده">
+      <div class="guide"><span></span></div>
+      <div class="pose" id="camPose"></div>
+      <div class="live" id="camLiveBadge"><i></i><span>بررسی زنده چهره</span></div>
     </div>
+    <p class="fstat" id="camStat"><i></i><span id="camStatText"></span></p>
+    <div class="shots" id="camShots"></div>
+    <p class="camhint" id="camHint">در حال راه‌اندازی دوربین…</p>
+    <div class="camrow" id="camLive">
+      <button type="button" class="btn primary" id="camShotBtn" onclick="captureManual()" disabled>ثبت همین حالا</button>
+      <button type="button" class="btn" id="camSkipBtn" onclick="skipStep()" disabled>رد کردن این مرحله</button>
+      <button type="button" class="btn" id="camDoneBtn" onclick="finishCam()" disabled>پایان و استفاده</button>
+      <button type="button" class="btn" onclick="closeCam()">انصراف</button>
+    </div>
+    <label class="autoline"><input type="checkbox" id="camAuto" checked onchange="toggleAuto()">
+      ثبت خودکار: هر حالت به‌محض اینکه چهره واضح و در زاویه خواسته بیاید گرفته می‌شود و مرحله بعد شروع می‌شود. با خاموش کردنش خودتان با «ثبت همین حالا» نمونه می‌گیرید.</label>
   </div>
 </div>
 <canvas id="upCanvas" hidden></canvas>
-<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="toast" id="toast"></div>
 <script>
 const IC = {
   users:'<svg fill="none" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-1a4 4 0 0 0-4-4h-4a4 4 0 0 0-4 4v1M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8m8 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6M3 20v-1a4 4 0 0 1 4-4h2"/></svg>',
@@ -382,9 +443,8 @@ function renderChart(rows){
     '<div class="empty" style="margin:auto">ورودی برای رسم نمودار نیست</div>'; return; }
   const max = Math.max(...hours.map(h => buckets[h]));
   document.getElementById('chart').innerHTML = hours.map(h => `
-    <div class="col ${buckets[h] === max ? 'hot' : ''}" title="${buckets[h]} ورود در ساعت ${h}">
+    <div class="col ${buckets[h] === max ? 'hot' : ''}">
       <div class="bar" style="height:${18 + 82 * buckets[h] / max}%"></div>
-      <b>${fmt(buckets[h])}</b>
       <small>${h}</small>
     </div>`).join('');
 }
@@ -396,12 +456,8 @@ async function refresh(){
       j(`/api/summary?date=${day}`), j(`/api/events?date=${day}`), j('/api/students')
     ]);
     document.getElementById('offline').classList.remove('on');
-    const u = document.getElementById('updated');
-    u.textContent = 'تازه‌سازی ' + new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    u.classList.remove('stale');
   } catch {
     document.getElementById('offline').classList.add('on');
-    document.getElementById('updated').classList.add('stale');
     return;
   }
   const gSel = utcDay(...day.split('-').map(Number));
@@ -435,7 +491,7 @@ async function refresh(){
       st.map(p => `<tr><td class="pic">${photoTag(p, 32)}</td><td>${esc(p.full_name)}</td><td class="num">${esc(p.student_no)}</td>
         <td>${esc(p.major || '—')}</td>
         <td class="num">${esc(p.phone || p.email || '—')}</td>
-        <td class="num">${fmt(p.samples)}</td>
+        <td class="num">${p.samples ? fmt(p.samples) : chip('۰ — قابل شناسایی نیست', 'susp')}</td>
         <td>${p.inside ? chip('داخل', 'in') : chip('خارج/غایب', 'absent')}</td>
         <td class="act"><button class="btn tiny" onclick="openModal(${p.id})">ویرایش</button>
           <button class="btn tiny danger" onclick="delStudent(${p.id})">حذف</button></td></tr>`).join('') + `</tbody></table>`
@@ -471,92 +527,513 @@ function openModal(id){
   document.getElementById('fEmail').value = p ? (p.email || '') : '';
   document.getElementById('fPhone').value = p ? (p.phone || '') : '';
   document.getElementById('fFile').value = '';
-  photoData = null; photoRemove = false; existingPhoto = !!(p && p.photo);
+  photoData = null; photoExtras = []; photoRemove = false; existingPhoto = !!(p && p.photo);
   paintPreview(p ? { id: p.id, v: p.photo_v } : null);
+  setFStat('fstat', null);
   document.getElementById('backdrop').classList.add('on');
   document.getElementById('fName').focus();
 }
 function closeModal(){
   document.getElementById('backdrop').classList.remove('on');
   document.getElementById('fFile').value = '';
-  photoData = null;
+  photoData = null; photoExtras = [];
+  setFStat('fstat', null);
 }
 /* ---------- عکس دانشجو: آپلود فایل یا گرفتن با دوربین ---------- */
 let photoData = null;        // data URL عکس انتخاب‌شده (هنوز ذخیره نشده)
+let photoExtras = [];        // حالت‌های اضافه چهره از وب‌کم (بردارهای بیشتر)
 let photoRemove = false;     // درخواست حذف عکس ذخیره‌شده
 let existingPhoto = false;
+let faceCheckTimer = null;
+const FSTAT_MSG = {
+  ok: 'چهره واضح و رو به دوربین پیدا شد — با «ذخیره» این دانشجو با دوربین شناسایی می‌شود.',
+  small: 'چهره در عکس خیلی کوچک است. عکس نزدیک‌تر/کلوزآپ از صورت بفرستید (صورت حداقل یک‌سوم عرض کادر).',
+  weak: 'چهره نصفه‌رو، تار یا در نور ضعیف است. تمام‌رخ و رو به دوربین عکس بگیرید.',
+  noface: 'چهره‌ای در این تصویر پیدا نشد. عکس دیگری بفرستید یا با وب‌کم بگیرید.',
+  error: 'بررسی چهره انجام نشد (dashboard را دوباره اجرا کنید). عکس ذخیره می‌شود ولی شاید شناسایی کار نکند.'
+};
+function setFStat(prefix, kind, text){
+  const box = document.getElementById(prefix);
+  const span = document.getElementById(prefix + 'Text');
+  if (!kind){ box.className = 'fstat'; box.style.display = 'none'; return; }
+  box.style.display = '';
+  box.className = 'fstat on ' + kind;
+  span.textContent = text || FSTAT_MSG[kind] || '';
+}
 function paintPreview(saved){
   const box = document.getElementById('preview');
-  if (photoData){ box.innerHTML = `<img src="${photoData}" alt="پیش‌نمایش عکس">`; return; }
+  const clear = document.getElementById('pClear');
+  if (photoData){
+    box.innerHTML = `<img src="${photoData}" alt="پیش‌نمایش عکس">`;
+    clear.style.display = '';
+    return;
+  }
   if (saved && existingPhoto && !photoRemove){
-    box.innerHTML = `<img src="/photo/${saved.id}?v=${saved.v}" alt="عکس فعلی">`; return;
+    box.innerHTML = `<img src="/photo/${saved.id}?v=${saved.v}" alt="عکس فعلی"><div class="badge">عکس فعلی</div>`;
+    clear.style.display = '';
+    return;
   }
   box.textContent = 'بدون عکس';
+  clear.style.display = 'none';
 }
-function scaleToCanvas(img, maxW){
+async function probeFace(dataUrl){
+  try { return await req('/api/facecheck', 'POST', { photo_data: dataUrl }); }
+  catch (err) { return { found: false, reason: 'error', score: 0, yaw: 0, pitch: 0 }; }
+}
+async function checkFace(dataUrl, prefix, okText){
+  clearTimeout(faceCheckTimer);
+  if (!dataUrl){ setFStat(prefix, null); return { kind: null }; }
+  setFStat(prefix, 'busy', 'در حال بررسی چهره… (اولین بار چند ثانیه طول می‌کشد)');
+  const d = await probeFace(dataUrl);
+  if (d.reason === 'error'){ setFStat(prefix, 'warn', FSTAT_MSG.error); return { kind: 'error' }; }
+  if (d.found){
+    setFStat(prefix, 'ok', `${okText || FSTAT_MSG.ok} (کیفیت ${Math.round(d.score * 100)}٪)`);
+    return { kind: 'ok', reason: d.reason };
+  }
+  setFStat(prefix, d.reason === 'noface' ? 'bad' : 'warn', d.message || FSTAT_MSG[d.reason] || FSTAT_MSG.noface);
+  return { kind: d.reason === 'noface' ? 'bad' : 'warn', reason: d.reason };
+}
+function scaleToCanvas(src, maxW){
   const c = document.getElementById('upCanvas');
-  const k = Math.min(1, maxW / (img.width || maxW));
-  c.width = Math.round((img.width || maxW) * k);
-  c.height = Math.round((img.height || maxW) * k);
-  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  const w0 = src.videoWidth || src.width || maxW;
+  const h0 = src.videoHeight || src.height || maxW;
+  const k = Math.min(1, maxW / w0);
+  c.width = Math.round(w0 * k);
+  c.height = Math.round(h0 * k);
+  c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
   return c.toDataURL('image/jpeg', 0.9);
 }
-function pickFile(input){
-  const f = input.files && input.files[0];
-  if (!f) return;
+function paintFormShots(){
+  const list = photoData ? [photoData].concat(photoExtras || []) : [];
+  document.getElementById('formShots').innerHTML = list.map((u, i) =>
+    `<div class="shot good"><img src="${u}" alt="نمونه ${faNum(i + 1)}">` +
+    `<span>${i === 0 ? 'عکس پروفایل' : `بردار ${faNum(i + 1)}`}</span></div>`).join('');
+}
+function useImageFile(f){
+  if (!f || !/^image\\//.test(f.type || '')) { toast('فایل انتخابی تصویر نیست', true); return; }
   const url = URL.createObjectURL(f);
   const img = new Image();
   img.onload = () => {
     photoData = scaleToCanvas(img, 720);
+    photoExtras = [];
     URL.revokeObjectURL(url);
     paintPreview(null);
-    toast('عکس انتخاب شد — «ذخیره» را بزنید');
+    paintFormShots();
+    checkFace(photoData, 'fstat');
   };
-  img.onerror = () => { URL.revokeObjectURL(url); toast('این فایل تصویر خوانده نشد', true); };
+  img.onerror = () => { URL.revokeObjectURL(url); toast('این فایل تصویر خوانده نشد؛ JPEG یا PNG بفرستید', true); };
   img.src = url;
 }
+function waitEvent(el, ev, ms){
+  return new Promise((res, rej) => {
+    const to = setTimeout(() => { el.removeEventListener(ev, done); rej(new Error('timeout')); }, ms || 6000);
+    function done(){ clearTimeout(to); el.removeEventListener(ev, done); res(); }
+    el.addEventListener(ev, done, { once: true });
+  });
+}
+async function readVideoFile(f, target){
+  const box = target === 'test' ? 'tStat' : 'fstat';
+  const url = URL.createObjectURL(f);
+  const vid = document.createElement('video');
+  vid.muted = true; vid.playsInline = true; vid.preload = 'auto';
+  setFStat(box, 'busy', 'در حال خواندن ویدیو…');
+  vid.src = url;
+  try { await waitEvent(vid, 'loadedmetadata', 8000); }
+  catch (err) {
+    URL.revokeObjectURL(url);
+    setFStat(box, 'bad', 'این ویدیو خوانده نشد؛ فایل MP4 یا WebM امتحان کنید.');
+    return;
+  }
+  const dur = isFinite(vid.duration) && vid.duration > 0 ? vid.duration : 0;
+  const marks = dur ? [0.04, 0.2, 0.4, 0.6, 0.8, 0.96] : [0];
+  const frames = [];
+  for (const m of marks){
+    if (dur){
+      try { vid.currentTime = Math.max(0.01, Math.min(dur - 0.01, dur * m)); await waitEvent(vid, 'seeked', 4000); }
+      catch (err) { break; }
+    }
+    if (!vid.videoWidth) continue;
+    const data = scaleToCanvas(vid, 720);
+    if (data && frames.indexOf(data) < 0) frames.push(data);
+    if (frames.length >= 6) break;
+  }
+  URL.revokeObjectURL(url);
+  vid.removeAttribute('src'); vid.load();
+  if (!frames.length){ setFStat(box, 'bad', 'از این ویدیو فریمی ساخته نشد.'); return; }
+  await validateFrames(frames, target);
+}
+async function validateFrames(frames, target){
+  const box = target === 'test' ? 'tStat' : 'fstat';
+  const good = [];
+  let lastReason = null;
+  for (let i = 0; i < frames.length; i++){
+    setFStat(box, 'busy', `بررسی فریم ${faNum(i + 1)} از ${faNum(frames.length)} ویدیو…`);
+    const d = await probeFace(frames[i]);
+    if (d.found) good.push({ url: frames[i], score: d.score });
+    else lastReason = d.reason;
+  }
+  good.sort((a, b) => b.score - a.score);
+  if (target === 'test'){
+    testData = good.length ? good[0].url : frames[0];
+    paintTestPreview();
+    runTest();
+    return;
+  }
+  if (!good.length){
+    photoData = frames[0]; photoExtras = [];
+    paintPreview(null); paintFormShots();
+    setFStat(box, 'bad', `${faNum(frames.length)} فریم از ویدیو بررسی شد و هیچ چهره قابل استفاده‌ای نداشت. ` +
+      (FSTAT_MSG[lastReason] || FSTAT_MSG.noface));
+    return;
+  }
+  photoData = good[0].url;
+  photoExtras = good.slice(1).map(s => s.url);
+  photoRemove = false;
+  paintPreview(null);
+  paintFormShots();
+  setFStat(box, 'ok', `${faNum(good.length)} فریم معتبر از ${faNum(frames.length)} فریم ویدیو پیدا شد — ` +
+    `با «ذخیره» هر ${faNum(good.length)} بردار به گالری اضافه می‌شود و واضح‌ترین فریم عکس پروفایل می‌شود.`);
+}
+function useMediaFile(f, target){
+  if (!f) return;
+  const type = f.type || '';
+  if (/^video\\//.test(type)) return readVideoFile(f, target);
+  if (/^image\\//.test(type)) return target === 'test' ? pickTestFile(f) : useImageFile(f);
+  toast('فایل انتخابی تصویر یا ویدیو نیست', true);
+}
+function pickFile(input){ useMediaFile(input.files && input.files[0], 'form'); }
 function clearPhoto(){
-  photoData = null;
+  photoData = null; photoExtras = [];
   document.getElementById('fFile').value = '';
+  paintFormShots();
   if (existingPhoto) photoRemove = true;
   paintPreview(null);
+  setFStat('fstat', null);
+  toast(existingPhoto ? 'عکس حذف شد — بعد از «ذخیره» پاک می‌شود' : 'انتخاب عکس لغو شد');
 }
+/* ---------- ضبط زنده چهره با وب‌کم: راهنمای مرحله‌به‌مرحله مثل احراز هویت ---------- */
 let camStream = null;
-async function openCam(){
-  document.getElementById('camBackdrop').classList.add('on');
+let camTimer = null;
+let camBusy = false;
+let camStreak = 0;
+let camLast = null;
+let camBase = null;
+let camTurnSign = 0;
+let camSeq = 0;
+let camIdx = 0;
+let camStepStart = 0;
+let camShots = [];
+let camPoses = [];
+const CAM_YAW_GATE = 0.12;
+const CAM_PITCH_GATE = 0.15;
+const CAM_STEP_GRACE = 9000;
+const CAM_POSES = [
+  { label: 'رو به دوربین', say: 'رو به دوربین، چند لحظه ثابت بمانید', kind: 'steady' },
+  { label: 'چرخش به چپ', say: 'الان سر را کمی به چپ بچرخانید', kind: 'turn' },
+  { label: 'چرخش به راست', say: 'الان سر را کمی به راست بچرخانید', kind: 'turn' },
+  { label: 'نگاه به بالا', say: 'الان کمی به بالا نگاه کنید', kind: 'tilt' },
+];
+const camAutoOn = () => { const c = document.getElementById('camAuto'); return !c || c.checked; };
+const camOpen = () => document.getElementById('camBackdrop').classList.contains('on');
+const camPose = () => camPoses[Math.min(camIdx, camPoses.length - 1)];
+function paintCamUI(){
+  const p = camPose();
+  document.getElementById('camStep').innerHTML = camTarget === 'test'
+    ? '<b>تست زنده</b> — چهره داخل بیضی باشد.'
+    : `<b>مرحله ${faNum(camIdx + 1)} از ${faNum(camPoses.length)}</b> · ${esc(p.label)} · نمونه‌ها: ${faNum(camShots.length)}`;
+  document.getElementById('camDots').innerHTML = camPoses.map((s, i) =>
+    `<b class="${i < camIdx ? 'done' : (i === camIdx ? 'cur' : '')}"><i></i><span>${esc(s.label)}</span></b>`).join('');
+  document.getElementById('camPose').textContent = camTarget === 'test'
+    ? 'چهره را داخل بیضی نگه دارید' : p.say;
+  document.getElementById('camShots').innerHTML = camShots.map(s =>
+    `<div class="shot ${s.ok ? 'good' : 'bad'}"><img src="${s.url}" alt="${esc(s.label)}">` +
+    `<span>${esc(s.label)}</span></div>`).join('');
+  document.getElementById('camDoneBtn').disabled = !camShots.length;
+}
+async function openCam(target){
+  camSeq++;
+  camTarget = target || 'form';
+  camPoses = camTarget === 'test' ? CAM_POSES.slice(0, 1) : CAM_POSES.slice();
+  camIdx = 0; camShots = []; camBase = null; camTurnSign = 0; camStreak = 0; camLast = null;
+  document.getElementById('camTitle').textContent =
+    camTarget === 'test' ? 'تست زنده چهره با وب‌کم' : 'ضبط چهره با وب‌کم (۴ حالت)';
   document.getElementById('camHint').textContent = 'در حال راه‌اندازی دوربین…';
-  document.getElementById('camShot').disabled = true;
+  document.getElementById('camShotBtn').disabled = true;
+  document.getElementById('camSkipBtn').disabled = true;
+  setFStat('camStat', null);
+  document.getElementById('camBackdrop').classList.add('on');
+  paintCamUI();
+  if (camStream) return readyCam();
   const v = document.getElementById('camVideo');
   try {
     camStream = await navigator.mediaDevices.getUserMedia({
       video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' }, audio: false });
     v.srcObject = camStream;
     await v.play();
-    document.getElementById('camHint').textContent =
-      'صورت را رو به دوربین و کامل در کادر نگه دارید (نور مناسب مهم است)، سپس «ثبت عکس».';
-    document.getElementById('camShot').disabled = false;
+    readyCam();
   } catch (err) {
-    document.getElementById('camHint').textContent =
-      `دوربین باز نشد (${err && err.name ? err.name : 'خطا'}) — اگر وب‌کم دارید در Windows Settings › Privacy › Camera دسترسی برنامه‌های دسکتاپ را فعال کنید، یا از «آپلود فایل عکس» استفاده کنید.`;
+    const name = err && err.name ? err.name : 'خطا';
+    const why = name === 'NotAllowedError'
+      ? 'دسترسی دوربین رد شد. در Windows Settings › Privacy &amp; security › Camera اجازه «دسترسی برنامه‌های دسکتاپ» را روشن کنید و از مرورگر نوار آدرس برای این صفحه دسترسی دوربین را Permit کنید.'
+      : name === 'NotFoundError'
+        ? 'وب‌کمی پیدا نشد. اگر عکس یا ویدیو آماده دارید با «انتخاب فایل» آن را بفرستید.'
+        : `دوربین باز نشد (${name}). ممکن است برنامه دیگری آن را نگه داشته باشد — همان را ببندید و دوباره تلاش کنید.`;
+    document.getElementById('camHint').innerHTML = why;
+    setFStat('camStat', 'warn', why);
   }
+}
+function readyCam(){
+  camSeq++;
+  camStepStart = Date.now();
+  camStreak = 0; camLast = null;
+  document.getElementById('camShotBtn').disabled = false;
+  document.getElementById('camSkipBtn').disabled = false;
+  document.getElementById('camHint').textContent = camTarget === 'test'
+    ? 'با «ثبت همین حالا» همان لحظه را تست کنید؛ اگر صبر کنید، به‌محض واضح شدن چهره خودکار ثبت می‌شود.'
+    : 'دستور هر مرحله روی تصویر نوشته می‌شود. به‌محض اینکه چهره در همان حالت واضح و ثابت شود خودکار ثبت می‌شود و مرحله بعد شروع می‌شود. می‌توانید «رد کردن این مرحله» را هم بزنید.';
+  paintCamUI();
+  startPoll();
+}
+function startPoll(){
+  stopPoll();
+  if (!camAutoOn() || !camStream) return;
+  document.getElementById('camLiveBadge').style.display = '';
+  camTimer = setInterval(camTick, 520);
+}
+function stopPoll(){
+  if (camTimer){ clearInterval(camTimer); camTimer = null; }
+  const b = document.getElementById('camLiveBadge');
+  if (b) b.style.display = 'none';
+}
+function toggleAuto(){
+  if (!camOpen()) return;
+  camStreak = 0; camLast = null;
+  if (camAutoOn()){ startPoll(); return; }
+  stopPoll();
+  setFStat('camStat', 'busy', 'ثبت خودکار خاموش است؛ در هر مرحله «ثبت همین حالا» را بزنید.');
+}
+function grabCamFrame(maxW){
+  const v = document.getElementById('camVideo'), c = document.getElementById('upCanvas');
+  const w0 = v.videoWidth || 640, h0 = v.videoHeight || 480;
+  const k = Math.min(1, maxW / w0);
+  c.width = Math.round(w0 * k); c.height = Math.round(h0 * k);
+  const ctx = c.getContext('2d');
+  ctx.translate(c.width, 0); ctx.scale(-1, 1);   // آینه‌ای، همان چیزی که کاربر می‌بیند
+  ctx.drawImage(v, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', 0.9);
+}
+function judge(p, d){
+  if (!d.found) return { ok: false, why: d.reason, msg: d.message || FSTAT_MSG[d.reason] || FSTAT_MSG.noface };
+  if (!camBase) return { ok: true, base: d };
+  if (p.kind === 'steady') return { ok: true };
+  if (p.kind === 'turn'){
+    const dyaw = d.yaw - camBase.yaw;
+    const fill = Math.min(100, Math.round(Math.abs(dyaw) / CAM_YAW_GATE * 100));
+    if (Math.abs(dyaw) < CAM_YAW_GATE)
+      return { ok: false, why: 'turn', msg: `چرخش سر ${faNum(fill)}٪ لازم است — کمی بیشتر همان طرف بچرخانید.` };
+    if (camTurnSign && Math.sign(dyaw) === camTurnSign)
+      return { ok: false, why: 'other', msg: 'این طرف قبلاً ثبت شد؛ حالا سر را به طرف دیگر بچرخانید.' };
+    return { ok: true, sign: Math.sign(dyaw) };
+  }
+  const dp = d.pitch - camBase.pitch;
+  const fill = Math.min(100, Math.round(Math.abs(dp) / CAM_PITCH_GATE * 100));
+  if (Math.abs(dp) < CAM_PITCH_GATE)
+    return { ok: false, why: 'tilt', msg: `شیب سر ${faNum(fill)}٪ لازم است — کمی بیشتر به بالا نگاه کنید.` };
+  return { ok: true };
+}
+async function camTick(){
+  if (camBusy || !camStream || !camOpen() || !camPoses.length) return;
+  const seq = camSeq;
+  camBusy = true;
+  try {
+    const url = grabCamFrame(640);
+    const d = await probeFace(url);
+    if (seq !== camSeq || !camOpen()) return;
+    const p = camPose();
+    const r = judge(p, d);
+    if (!r.ok){
+      camStreak = 0; camLast = d;
+      const slow = Date.now() - camStepStart > CAM_STEP_GRACE && r.why !== 'noface';
+      setFStat('camStat', r.why === 'noface' ? 'bad' : 'warn',
+        slow ? r.msg + ' اگر زاویه اندازه‌گیری نشد، «ثبت همین حالا» را بزنید — همان فریم ثبت می‌شود.' : r.msg);
+      return;
+    }
+    if (p.kind === 'steady' && !camBase && camStreak < 1){
+      camStreak++; camLast = d;
+      setFStat('camStat', 'busy', 'چهره پیدا شد — یک لحظه دیگر ثابت بمانید…');
+      return;
+    }
+    lockShot(url, r);
+  } catch (err) {
+    setFStat('camStat', 'warn', FSTAT_MSG.error);
+  } finally { camBusy = false; }
+}
+function lockShot(url, r){
+  const p = camPose();
+  stopPoll();                       // تا زمان رفتن به مرحله بعد، فریم جدیدی بررسی نشود
+  camShots.push({ url, label: p.label, ok: true });
+  if (r.base) camBase = { yaw: r.base.yaw, pitch: r.base.pitch };
+  if (r.sign) camTurnSign = r.sign;
+  camStreak = 0; camLast = null;
+  flashShot(url);
+  paintCamUI();
+  setFStat('camStat', 'busy', `حالت «${p.label}» ثبت شد ✓`);
+  const seq = camSeq;
+  setTimeout(() => { if (seq === camSeq) (camTarget === 'test' ? finishCam() : nextStep()); }, 800);
+}
+function flashShot(url){
+  document.getElementById('camShotImg').src = url;
+  const stage = document.getElementById('camStage');
+  stage.classList.add('on-shot');
+  setTimeout(() => stage.classList.remove('on-shot'), 420);
+}
+function nextStep(){
+  camIdx++;
+  camStreak = 0; camLast = null;
+  camSeq++; camStepStart = Date.now();
+  stopPoll();
+  if (camIdx >= camPoses.length){ finishCam(); return; }
+  setFStat('camStat', null);
+  paintCamUI();
+  if (camOpen() && camAutoOn()) startPoll();
+}
+function skipStep(){
+  if (camTarget === 'test') return;
+  stopPoll();
+  setFStat('camStat', 'busy', 'این مرحله رد شد.');
+  nextStep();
+  if (camOpen() && camAutoOn()) startPoll();
+}
+async function captureManual(){
+  if (!camStream || !camPoses.length){ toast('دوربین آماده نیست', true); return; }
+  const seq = camSeq;
+  stopPoll();
+  camBusy = true;
+  setFStat('camStat', 'busy', 'در حال بررسی همین لحظه…');
+  try {
+    const url = grabCamFrame(720);
+    const d = await probeFace(url);
+    if (seq !== camSeq || !camOpen()) return;
+    const p = camPose();
+    if (!d.found && camTarget !== 'test'){
+      camStreak = 0;
+      setFStat('camStat', 'bad', d.message || FSTAT_MSG[d.reason] || FSTAT_MSG.noface);
+      if (camAutoOn()) startPoll();
+      return;
+    }
+    camShots.push({ url, label: p.label, ok: !!d.found });
+    if (d.found){
+      if (!camBase) camBase = { yaw: d.yaw, pitch: d.pitch };
+      else if (p.kind === 'turn' && !camTurnSign && Math.abs(d.yaw - camBase.yaw) >= CAM_YAW_GATE)
+        camTurnSign = Math.sign(d.yaw - camBase.yaw);
+    }
+    camStreak = 0; camLast = null;
+    flashShot(url);
+    paintCamUI();
+    setFStat('camStat', d.found ? 'busy' : 'warn', d.found
+      ? `حالت «${p.label}» ثبت شد ✓`
+      : 'چهره در این فریم واضح نبود؛ این نمونه به گالری اضافه نمی‌شود.');
+    setTimeout(() => { if (seq === camSeq) (camTarget === 'test' ? finishCam() : nextStep()); }, 700);
+  } finally { camBusy = false; }
+}
+function finishCam(){
+  camSeq++;
+  stopPoll(); stopCam();
+  document.getElementById('camBackdrop').classList.remove('on');
+  const shots = camShots.slice();
+  camShots = []; camIdx = 0; camBase = null; camTurnSign = 0;
+  const good = shots.filter(s => s.ok);
+  if (camTarget === 'test'){
+    const pick = good[good.length - 1] || shots[shots.length - 1];
+    if (!pick) return;
+    testData = pick.url;
+    paintTestPreview();
+    runTest();
+    return;
+  }
+  if (!good.length){
+    toast(shots.length ? 'هیچ نمونه‌ای کیفیت کافی نداشت؛ دوباره با نور بهتر تلاش کنید' : 'هیچ نمونه‌ای ثبت نشد', true);
+    return;
+  }
+  photoData = good[0].url;
+  photoExtras = good.slice(1).map(s => s.url);
+  photoRemove = false;
+  paintPreview(null);
+  paintFormShots();
+  setFStat('fstat', 'ok', `${faNum(good.length)} حالت چهره آماده است — با «ذخیره» هر ${faNum(good.length)} بردار به گالری اضافه می‌شود.`);
+  if (shots.length > good.length) toast(`${faNum(shots.length - good.length)} نمونه بی‌کیفیت کنار گذاشته شد`, true);
 }
 function stopCam(){
   if (camStream){ camStream.getTracks().forEach(t => t.stop()); camStream = null; }
   const v = document.getElementById('camVideo');
   v.srcObject = null;
 }
-function closeCam(){ stopCam(); document.getElementById('camBackdrop').classList.remove('on'); }
-function captureCam(){
-  const v = document.getElementById('camVideo'), c = document.getElementById('upCanvas');
-  c.width = v.videoWidth || 640; c.height = v.videoHeight || 480;
-  const k = Math.min(1, 720 / c.width);
-  c.width = Math.round(c.width * k); c.height = Math.round(c.height * k);
-  c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
-  photoData = c.toDataURL('image/jpeg', 0.92);
-  photoRemove = false;
-  closeCam();
-  paintPreview(null);
-  toast('عکس گرفته شد — «ذخیره» را بزنید');
+function closeCam(){
+  camSeq++;
+  stopPoll(); stopCam();
+  camShots = []; camIdx = 0; camBase = null; camTurnSign = 0; camStreak = 0; camLast = null;
+  document.getElementById('camBackdrop').classList.remove('on');
+}
+/* ---------- تست تشخیص چهره + اعتبارسنجی گالری ---------- */
+let testData = null;
+let camTarget = 'form';
+function paintTestPreview(){
+  const box = document.getElementById('testPreview');
+  box.innerHTML = testData ? `<img src="${testData}" alt="عکس تست">` : 'بدون عکس';
+}
+function pickTestFile(f){
+  if (!f || !/^image\\//.test(f.type || '')) { toast('فایل انتخابی تصویر نیست', true); return; }
+  const url = URL.createObjectURL(f);
+  const img = new Image();
+  img.onload = () => {
+    testData = scaleToCanvas(img, 720);
+    URL.revokeObjectURL(url);
+    paintTestPreview();
+    runTest();
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); toast('این فایل تصویر خوانده نشد', true); };
+  img.src = url;
+}
+function pickTest(input){ pickTestFile(input.files && input.files[0]); }
+const pct = v => Math.round(v * 100);
+async function runTest(){
+  if (!testData){ toast('اول یک عکس انتخاب کنید یا با وب‌کم بگیرید', true); return; }
+  const btn = document.getElementById('tRun'); btn.disabled = true;
+  setFStat('tStat', 'busy', 'در حال پیدا کردن چهره و تطبیق با گالری…');
+  try {
+    const d = await req('/api/identify', 'POST',
+      { photo_data: testData, threshold: parseFloat(document.getElementById('tThr').value) || 0.4 });
+    const g = `چهره در گالری: ${d.vectors} بردار · ${d.students} دانشجو · آستانه ${d.threshold}`;
+    if (d.reason !== 'ok' && !d.matched){
+      setFStat('tStat', 'bad',
+        `${FSTAT_MSG[d.reason] || 'چهره قابل استفاده نیست.'} ${g}`);
+    } else if (d.matched){
+      setFStat('tStat', 'ok',
+        `شناسایی شد: ${d.matched.name} (${d.matched.code}) — شباهت ${pct(d.best_sim)}٪ · ` +
+        `${d.matched.samples} نمونه چهره در گالری${d.matched.photo ? ' · عکس هم دارد' : ''}. ${g}`);
+    } else {
+      setFStat('tStat', 'warn',
+        `هیچ دانشجویی با آستانه ${d.threshold} شناخته نشد — نزدیک‌ترین: ` +
+        (d.best ? `${d.best.name} (${d.best.code}) با ${pct(d.best_sim)}٪` : 'هیچ') +
+        `. اگر واقعاً همان نفر است، آستانه را پایین بیاورید (مثلاً ۰.۳۵) یا با «ویرایش» همان عکس را برای «${d.best ? d.best.name : 'دانشجو'}» ثبت کنید. ${g}`);
+    }
+  } catch (err) {
+    setFStat('tStat', 'bad', err.message);
+  } finally { btn.disabled = false; }
+}
+async function checkGallery(){
+  const box = document.getElementById('galleryCheck');
+  box.innerHTML = '<p class="pnote">در حال بررسی…</p>';
+  let d;
+  try { d = await j('/api/gallerycheck'); }
+  catch (err) { box.innerHTML = `<p class="pnote">${esc(err.message || 'خطا')}</p>`; return; }
+  const bad = d.rows.filter(r => !r.samples).length;
+  box.innerHTML = `<table><thead><tr><th>دانشجو</th><th>شماره</th><th>نمونه چهره</th><th>عکس</th><th>وضعیت</th></tr></thead><tbody>` +
+    d.rows.map(r => `<tr class="${r.samples ? '' : 'susp'}"><td>${esc(r.name)}</td><td style="direction:ltr;text-align:left">${esc(r.code)}</td>` +
+      `<td>${faNum(r.samples)}</td><td style="direction:ltr">${r.photo ? chip('دارد', 'in') : chip('ندارد', 'absent')}</td>` +
+      `<td>${r.samples ? chip('قابل شناسایی', 'in') : chip('در گالری نیست — enroll.py یا عکس رو‌به‌دوربین لازم دارد', 'susp')}</td></tr>`).join('') +
+    `</tbody></table><p class="pnote">${faNum(d.vectors)} بردار چهره برای ${faNum(d.students)} دانشجو — ` +
+    (bad ? `${faNum(bad)} نفر هیچ بردار چهره ندارند و با دوربین شناسایی نمی‌شوند.` : 'همه حداقل یک بردار چهره دارند.') + `</p>`;
 }
 async function saveStudent(e){
   e.preventDefault();
@@ -569,23 +1046,32 @@ async function saveStudent(e){
     phone: document.getElementById('fPhone').value.trim(),
   };
   if (photoData) body.photo_data = photoData;
+  if (photoExtras && photoExtras.length) body.photo_data_list = [photoData].concat(photoExtras);
   if (photoRemove) body.photo_remove = true;
-  const btn = document.getElementById('mSave'); btn.disabled = true;
+  const shots = photoData ? 1 + photoExtras.length : 0;
+  const btn = document.getElementById('mSave'); const oldLabel = btn.textContent;
+  btn.disabled = true; btn.textContent = 'در حال ذخیره…';
   const note = document.getElementById('pNote');
   const original = note.textContent;
   try {
-    if (photoData) note.textContent = 'در حال بررسی چهره عکس… (اولین بار چند ثانیه طول می‌کشد)';
+    if (photoData) {
+      note.textContent = `در حال ثبت ${faNum(shots)} حالت چهره در گالری تشخیص… (چند ثانیه)`;
+      setFStat('fstat', 'busy', 'در حال ثبت چهره در گالری…');
+    }
     const d = await req(id ? `/api/students/${id}` : '/api/students', id ? 'PUT' : 'POST', body);
     closeModal();
     let msg = id ? 'اطلاعات به‌روزرسانی شد' : 'دانشجو اضافه شد';
-    if (d.face_added) msg += ` — چهره از عکس ثبت شد (${d.face_added} نمونه به گالری اضافه شد)`;
+    if (d.photo_removed) msg += ' — عکس حذف شد';
+    else if (d.face_added) msg += ` — ${faNum(d.face_added)} حالت چهره به گالری اضافه شد`;
     toast(msg);
-    if (d.photo_warning) toast(d.photo_warning, true);
+    if (d.photo_warning) setTimeout(() => toast(d.photo_warning, true), 900);
     await refresh();
   } catch (err) {
     toast(err.message, true);
+    if (photoData) setFStat('fstat', 'bad', `ذخیره نشد: ${err.message}`);
   } finally {
     btn.disabled = false;
+    btn.textContent = oldLabel;
     note.textContent = original;
   }
   return false;
@@ -756,14 +1242,26 @@ function closeCal(){ document.getElementById('cal').classList.remove('on'); }
 document.addEventListener('click', closeCal);
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
-  closeModal(); closeCal();
+  closeCal();
   if (document.getElementById('camBackdrop').classList.contains('on')) closeCam();
+  else if (document.getElementById('backdrop').classList.contains('on')) closeModal();
 });
+function wireDrop(el, onFile){
+  el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('over'); });
+  el.addEventListener('dragleave', () => el.classList.remove('over'));
+  el.addEventListener('drop', e => {
+    e.preventDefault();
+    el.classList.remove('over');
+    const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) onFile(f);
+  });
+}
+wireDrop(document.getElementById('drop'), useImageFile);
+wireDrop(document.getElementById('testDrop'), pickTestFile);
 document.getElementById('day').value = isoOf(localToday());
 const j0 = selJal(); view = { jy: j0.jy, jm: j0.jm };
 paintDayBtn();
 tick(); setInterval(tick, 1000);
-addEventListener('scroll', () => document.querySelector('header').classList.toggle('scrolled', scrollY > 4), { passive: true });
 refresh(); setInterval(refresh, 5000);
 loadHours(); loadEod(); loadReports();
 </script>
@@ -785,7 +1283,9 @@ def _with_status(rows):
 
 @app.get("/")
 def index():
-    return PAGE
+    resp = make_response(PAGE)
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @app.get("/api/events")
@@ -847,6 +1347,86 @@ def api_students():
     return jsonify(out)
 
 
+@app.post("/api/facecheck")
+def api_facecheck():
+    """پیش‌بررسی عکس: آیا چهره قابل استفاده است، کیفیت و زاویه سر چقدر است."""
+    body = request.get_json(silent=True) or {}
+    data_url = body.get("photo_data")
+    if not isinstance(data_url, str) or not data_url.strip():
+        return jsonify({"error": "عکسی ارسال نشد"}), 400
+    frame, err = _decode_photo(data_url)
+    if frame is None:
+        return jsonify({"found": False, "reason": err, "score": 0.0, "yaw": 0.0, "pitch": 0.0,
+                        "message": FACE_CHECK_MSG[err]})
+    info = engine.analyze(frame)
+    reason = info["reason"]
+    return jsonify({"found": reason == "ok", "reason": reason, "score": info["det"],
+                    "yaw": info["yaw"], "pitch": info["pitch"],
+                    "message": None if reason == "ok" else FACE_CHECK_MSG[reason]})
+
+
+DEFAULT_THRESHOLD = 0.40
+
+
+def _gallery_counts() -> dict:
+    _emb, ids = engine.load_gallery()
+    counts: dict = {}
+    for i in ids:
+        counts[int(i)] = counts.get(int(i), 0) + 1
+    return counts
+
+
+@app.post("/api/identify")
+def api_identify():
+    """تست تشخیص: این عکس به کدام دانشجوی گالری تعلق دارد؟"""
+    body = request.get_json(silent=True) or {}
+    data_url = body.get("photo_data")
+    if not isinstance(data_url, str) or not data_url.strip():
+        return jsonify({"error": "عکسی ارسال نشد"}), 400
+    frame, err = _decode_photo(data_url)
+    if frame is None:
+        return jsonify({"error": FACE_CHECK_MSG[err]}), 400
+    try:
+        thr = float(body.get("threshold"))
+    except (TypeError, ValueError):
+        thr = DEFAULT_THRESHOLD
+    thr = min(max(thr, 0.05), 0.95)
+    res = engine.identify(frame, thr)
+    by_id = {s["id"]: s for s in db.list_students()}
+    counts = _gallery_counts()
+
+    def who(sid):
+        s = by_id.get(sid)
+        if not s:
+            return None
+        return {"id": sid, "name": s["full_name"], "code": s["student_no"],
+                "samples": counts.get(sid, 0), "photo": bool(_photo_file(s))}
+
+    return jsonify({
+        "reason": res["reason"], "det": res["det"], "threshold": thr,
+        "vectors": sum(counts.values()), "students": len(by_id),
+        "best_sim": res["best_sim"], "matched": who(res["student_id"]),
+        "best": who(res["best_id"]),
+    })
+
+
+@app.get("/api/gallerycheck")
+def api_gallerycheck():
+    """وضعیت اعتبارسنجی گالری: هر دانشجو چند نمونه چهره و عکس دارد."""
+    counts = _gallery_counts()
+    rows = []
+    for s in db.list_students():
+        n = counts.get(s["id"], 0)
+        photo = _photo_file(s)
+        rows.append({
+            "id": s["id"], "name": s["full_name"], "code": s["student_no"],
+            "samples": n, "photo": bool(photo),
+            "state": "ok" if n else "noface",
+            "warning": None if n else "هیچ بردار چهره‌ای ندارد؛ با دوربین هرگز شناسایی نمی‌شود",
+        })
+    return jsonify({"vectors": sum(counts.values()), "students": len(rows), "rows": rows})
+
+
 def _photo_file(row):
     """مسیر فایل عکس دانشجو؛ None اگر وجود ندارد."""
     name = (row["photo"] or "") if "photo" in row.keys() else ""
@@ -856,27 +1436,75 @@ def _photo_file(row):
     return path if path.exists() else None
 
 
-def _store_photo(student_id: int, data_url: str) -> tuple[str | None, int, str | None]:
-    """ذخیره عکس و افزودن بردار چهره‌اش به گالری. برمی‌گرداند (فایل, تعداد بردار, هشدار)."""
+FACE_REASONS = {
+    "noface": "چهره‌ای در این تصویر پیدا نشد؛ عکس ذخیره شد ولی دانشجو هنوز با دوربین شناسایی نمی‌شود.",
+    "small": "چهره در عکس خیلی کوچک است؛ عکس کلوزآپ‌تر از صورت بفرستید. عکس ذخیره شد ولی چهره به گالری اضافه نشد.",
+    "weak": "چهره تار یا نیمه‌رو است؛ تمام‌رخ و با نور مناسب عکس بگیرید. عکس ذخیره شد ولی چهره به گالری اضافه نشد.",
+    "bad_image": "فایل تصویر خوانده نشد؛ JPEG یا PNG بفرستید.",
+    "bad_data": "داده عکس معتبر نیست.",
+}
+
+# پیام‌های پیش‌بررسی (قبل از ذخیره): فقط راهنما، بدون اشاره به ذخیره شدن
+FACE_CHECK_MSG = {
+    "noface": "چهره‌ای در این تصویر پیدا نشد. عکس دیگری بفرستید یا با وب‌کم بگیرید.",
+    "small": "چهره در عکس خیلی کوچک است. صورت باید حداقل یک‌سوم عرض کادر را پر کند.",
+    "weak": "چهره تار، نیمه‌رو یا در نور ضعیف است. تمام‌رخ و رو به دوربین عکس بگیرید.",
+    "bad_image": "این فایل تصویر خوانده نشد؛ JPEG یا PNG بفرستید.",
+    "bad_data": "داده عکس معتبر نیست.",
+}
+
+
+def _decode_photo(data_url: str):
+    """data URL / base64 خالص -> numpy frame. خطا را با کلید FACE_REASONS برمی‌گرداند."""
     payload = data_url.split("base64,", 1)[-1] if "base64," in data_url else data_url
     try:
         raw = base64.b64decode(payload)
     except Exception:
-        return None, 0, "داده عکس معتبر نیست"
+        return None, "bad_data"
     frame = cv2.imdecode(np.frombuffer(raw, dtype=np.uint8), cv2.IMREAD_COLOR)
     if frame is None:
-        return None, 0, "فایل تصویر خوانده نشد؛ JPEG یا PNG بفرستید"
+        return None, "bad_image"
+    return frame, None
+
+
+def _store_photo(student_id: int, data_urls: list[str]) -> tuple[str | None, int, str | None]:
+    """چند حالت چهره را ذخیره می‌کند. برمی‌گرداند (فایل, تعداد بردار, هشدار).
+
+    اولین عکس به‌عنوان عکس پروفایل روی دیسک می‌نشیند و بردار هر عکسی که از
+    دروازه کیفیت رد شود به گالری اضافه می‌شود؛ زوایای مختلف بردارهای مقاوم‌تری
+    می‌سازند و تشخیص با دوربین دقیق‌تر می‌شود.
+    """
+    frames = []
+    err_key = None
+    for url in data_urls:
+        frame, err = _decode_photo(url)
+        if frame is None:
+            err_key = err
+            continue
+        frames.append(frame)
+    if not frames:
+        return None, 0, FACE_REASONS[err_key or "bad_data"]
     PHOTOS_DIR.mkdir(exist_ok=True)
     filename = f"student_{student_id}.jpg"
-    ok, buf = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
+    ok, buf = cv2.imencode(".jpg", frames[0], [int(cv2.IMWRITE_JPEG_QUALITY), 92])
     if not ok:
         return None, 0, "ذخیره عکس ناموفق بود"
     (PHOTOS_DIR / filename).write_bytes(buf.tobytes())
-    face = engine.capture_frame_for_enroll(frame)
-    if face is None:
-        return filename, 0, "چهره واضح در عکس پیدا نشد؛ عکس ذخیره شد ولی دانشجو هنوز با دوربین شناسایی نمی‌شود"
-    engine.add_embeddings(student_id, [face.embedding])
-    return filename, 1, None
+
+    embeddings, rejected = [], 0
+    for frame in frames:
+        face = engine.capture_frame_for_enroll(frame)
+        if face is None:
+            rejected += 1
+        else:
+            embeddings.append(face.embedding)
+    if not embeddings:
+        quality, _ = engine.face_quality(frames[0])
+        return filename, 0, FACE_REASONS[quality if quality != "ok" else "noface"]
+    engine.add_embeddings(student_id, embeddings)
+    warning = (f"چهره ثبت شد، ولی {rejected} از {len(frames)} حالت "
+               "به دلیل کیفیت پایین به گالری اضافه نشد.") if rejected else None
+    return filename, len(embeddings), warning
 
 
 def _drop_photo(student_id: int) -> None:
@@ -897,9 +1525,14 @@ def _apply_photo(student_id: int, body: dict) -> dict:
         _drop_photo(student_id)
         db.set_student_photo(student_id, None)
         result["photo_removed"] = True
+    data_urls: list[str] = []
+    if isinstance(body.get("photo_data_list"), list):
+        data_urls = [u for u in body["photo_data_list"] if isinstance(u, str) and u.strip()]
     data_url = body.get("photo_data")
-    if isinstance(data_url, str) and data_url.strip():
-        filename, added, warning = _store_photo(student_id, data_url)
+    if not data_urls and isinstance(data_url, str) and data_url.strip():
+        data_urls = [data_url]
+    if data_urls:
+        filename, added, warning = _store_photo(student_id, data_urls)
         if filename:
             db.set_student_photo(student_id, filename)
         result.update({"face_added": added, "photo_warning": warning})
@@ -1080,8 +1713,18 @@ def _date_arg():
         return date.today()
 
 
+def _warm_up_engine() -> None:
+    """مدل InsightFace را هنگام بالا آمدن لود می‌کند تا اولین بررسی چهره چند ثانیه معطل نشود."""
+    try:
+        engine.get_face_app()
+        print("مدل چهره آماده است.")
+    except Exception as err:
+        print(f"هشدار: مدل چهره لود نشد ({err}) — با اولین استفاده دوباره تلاش می‌شود.")
+
+
 if __name__ == "__main__":
     db.init_db()
+    threading.Thread(target=_warm_up_engine, name="face-warmup", daemon=True).start()
     threading.Thread(target=_scheduler_loop, name="eod-report", daemon=True).start()
     print("داشبورد: http://127.0.0.1:8050")
-    app.run(host="127.0.0.1", port=8050, debug=False)
+    app.run(host="127.0.0.1", port=8050, debug=False, threaded=True)

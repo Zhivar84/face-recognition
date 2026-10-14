@@ -2,9 +2,10 @@
 
 Logic:
 - IN   : logged when a known student is recognized and has no open session.
-- OUT  : logged automatically after the student stays unseen for --absence-minutes.
+- OUT  : logged automatically after the student stays unseen for --absence-minutes,
+         or immediately when --mode alternate and the student is seen again later.
 
-Usage: python monitor.py [--camera 0] [--threshold 0.4] [--absence-minutes 15] [--fps 8]
+Usage: python monitor.py [--camera 0] [--threshold 0.4] [--absence-minutes 15]
 """
 from __future__ import annotations
 
@@ -14,6 +15,7 @@ import time
 from datetime import datetime
 
 import cv2
+import numpy as np
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 

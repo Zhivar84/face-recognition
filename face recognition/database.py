@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 import sqlite3
 from contextlib import contextmanager
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 DB_PATH = Path(__file__).parent / "attendance.db"

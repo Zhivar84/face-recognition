@@ -1,6 +1,8 @@
 """Face engine: SCRFD detection + ArcFace embeddings (InsightFace buffalo_l) with cosine matching."""
 from __future__ import annotations
 
+import json
+import threading
 from pathlib import Path
 
 import cv2
@@ -11,39 +13,111 @@ DATA_DIR = Path(__file__).parent / "data"
 EMBEDDINGS_PATH = DATA_DIR / "embeddings.npz"
 
 FACE_APP: FaceAnalysis | None = None
+_APP_LOCK = threading.RLock()      # استنتاج ONNX هم‌زمان از چند رشته امن نیست
 
 
 def get_face_app() -> FaceAnalysis:
     global FACE_APP
     if FACE_APP is None:
-        FACE_APP = FaceAnalysis(name="buffalo_l", providers=["CPUExecutionProvider"])
-        FACE_APP.prepare(ctx_id=0, det_size=(640, 640))
+        with _APP_LOCK:
+            if FACE_APP is None:
+                app = FaceAnalysis(name="buffalo_l", providers=["CPUExecutionProvider"])
+                app.prepare(ctx_id=0, det_size=(640, 640))
+                FACE_APP = app
     return FACE_APP
 
 
 def detect_faces(frame: np.ndarray):
-    return get_face_app().get(frame)
+    """اینفرانس سریال‌شده: داشبورد و مانیتور هم‌زمان مدل را درگیر نمی‌کنند."""
+    with _APP_LOCK:
+        return get_face_app().get(frame)
 
 
-def best_face(frame: np.ndarray):
-    """Largest frontal-enough face with a valid embedding."""
+MIN_FACE_RATIO = 0.15   # عرض چهره نسبت به عرض تصویر، کمتر از آن بردار قابل اتکا نیست
+MIN_DET_SCORE = 0.75    # چهره تمام‌رخ در عکس ۷۲۰px حدود ۰.۸۸ می‌گیرد؛ زیر این مقدار پروفیل/تار است
+
+
+def _largest_face(frame: np.ndarray):
     faces = [f for f in detect_faces(frame) if f.embedding is not None and f.bbox is not None]
     if not faces:
         return None
     return max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
 
 
-def capture_frame_for_enroll(frame: np.ndarray):
-    """Return aligned-ready crop info: (face, quality) or None."""
-    face = best_face(frame)
+def best_face(frame: np.ndarray):
+    """Largest face with a valid embedding."""
+    return _largest_face(frame)
+
+
+def _grade(face, frame) -> str:
+    if (face.bbox[2] - face.bbox[0]) / max(frame.shape[1], 1) < MIN_FACE_RATIO:
+        return "small"
+    if face.det_score < MIN_DET_SCORE:
+        return "weak"
+    return "ok"
+
+
+def face_quality(frame: np.ndarray) -> tuple[str, float]:
+    """چراغ‌راهنمای کیفیت عکس: ('ok'|'noface'|'small'|'weak', det_score)."""
+    face = _largest_face(frame)
     if face is None:
-        return None
-    w = frame.shape[1]
-    x1, y1, x2, y2 = face.bbox
-    face_w = (x2 - x1) / w
-    if face_w < 0.15:  # face too small for a reliable embedding
-        return None
-    if face.det_score < 0.85:
+        return "noface", 0.0
+    return _grade(face, frame), float(face.det_score)
+
+
+def _pose(face) -> tuple[float, float]:
+    """زاویه سر از پنج نقطه چهره: (yaw, pitch) نرمال‌شده با فاصله چشم‌ها.
+
+    yaw صفر یعنی تمام‌رخ؛ چرخش سر علامت را عوض می‌کند. pitch هم همین‌طور.
+    قدر مطلق‌ها واحد دلخواه‌اند، بنابراین مقایسه با خط‌مبدأ (حالت تمام‌رخ)
+    معنا دارد، نه مقدار مطلق — همین باعث می‌شود جای دوربین روی نتیجه اثر نگذارد.
+    """
+    kps = getattr(face, "kps", None)
+    if kps is None or len(kps) < 5:
+        return 0.0, 0.0
+    le, re, nose = np.asarray(kps[0], float), np.asarray(kps[1], float), np.asarray(kps[2], float)
+    eye_mid = (le + re) / 2
+    eye_dist = float(np.linalg.norm(le - re)) or 1.0
+    return (float((nose[0] - eye_mid[0]) / eye_dist), float((nose[1] - eye_mid[1]) / eye_dist))
+
+
+def analyze(frame: np.ndarray) -> dict:
+    """کیفیت + زاویه سر؛ برای راهنمایی مرحله‌به‌مرحله «احراز هویت با وب‌کم»."""
+    face = _largest_face(frame)
+    if face is None:
+        return {"reason": "noface", "det": 0.0, "yaw": 0.0, "pitch": 0.0}
+    yaw, pitch = _pose(face)
+    return {"reason": _grade(face, frame), "det": float(face.det_score),
+            "yaw": yaw, "pitch": pitch}
+
+
+def identify(frame: np.ndarray, threshold: float) -> dict:
+    """یک عکس -> کیفیت چهره + نزدیک‌ترین دانشجو در گالری (بخش «تست تشخیص چهره»)."""
+    face = _largest_face(frame)
+    if face is None:
+        return {"reason": "noface", "det": 0.0, "best_id": None, "best_sim": 0.0,
+                "student_id": None}
+    gallery, ids = load_gallery()
+    best_id = best_sim = None
+    if gallery.size:
+        q = face.embedding / np.linalg.norm(face.embedding)
+        g = gallery / (np.linalg.norm(gallery, axis=1, keepdims=True) + 1e-8)
+        sims = g @ q
+        i = int(np.argmax(sims))
+        best_id, best_sim = int(ids[i]), float(sims[i])
+    return {
+        "reason": _grade(face, frame),
+        "det": float(face.det_score),
+        "best_id": best_id,
+        "best_sim": best_sim or 0.0,
+        "student_id": best_id if (best_sim or 0.0) >= threshold else None,
+    }
+
+
+def capture_frame_for_enroll(frame: np.ndarray):
+    """بزرگ‌ترین چهره قابل استفاده، یا None."""
+    face = _largest_face(frame)
+    if face is None or _grade(face, frame) != "ok":
         return None
     return face
 

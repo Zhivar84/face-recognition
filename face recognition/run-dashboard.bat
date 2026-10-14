@@ -1,13 +1,17 @@
 @echo off
-rem Starts the Persian dashboard using the project's own Python (.venv).
-rem Double-click this file, then open or refresh http://127.0.0.1:8050 in your browser.
+rem Starts the Persian dashboard with the project's own Python (.venv) and restarts it if it dies.
+rem Keep this window open while using the dashboard. Close it (or Ctrl+C) to stop.
+setlocal
 cd /d "%~dp0"
 title Face Attendance Dashboard - keep this window open
 echo.
-echo Starting dashboard... when it is ready open:  http://127.0.0.1:8050
-echo Keep this window open while using the dashboard. Close it (or Ctrl+C) to stop.
+echo Starting dashboard...  http://127.0.0.1:8050
+echo Keep this window open. If the server stops it restarts automatically.
 echo.
+start "" "http://127.0.0.1:8050"
+:loop
 .venv\Scripts\python.exe dashboard.py
 echo.
-echo Dashboard stopped. If you saw an error above, read it carefully.
-pause
+echo Dashboard stopped (exit code %errorlevel%). Restarting in 3 seconds... press Ctrl+C to quit.
+timeout /t 3 /nobreak >nul
+goto loop

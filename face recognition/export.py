@@ -307,8 +307,7 @@ def sheet_charts(wb, data: dict) -> None:
         r += 1
     hours_last = r - 1
 
-    # بلوک روند باید بعد از بلندترین ردیف ساعت شروع شود، وگرنه روی داده ساعت‌ها می‌نویسد
-    trend_start = max(data_row + 16, hours_last + 2)
+    trend_start = data_row + 16
     ws.cell(row=trend_start - 1, column=9, value="تاریخ").font = Font(bold=True)
     ws.cell(row=trend_start - 1, column=10, value="حاضر").font = Font(bold=True)
     ws.cell(row=trend_start - 1, column=11, value="غایب").font = Font(bold=True)
