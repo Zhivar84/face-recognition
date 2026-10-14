@@ -1,0 +1,27 @@
+۰) باز کردن ترمینال در پروژه : cd "D:\project\face recognition"
+۱) ثبت‌نام دانشجو (یک‌بار برای هر نفر) : 
+الف) با وب‌کم — ۶ نمونه خودکار: .venv\Scripts\python enroll.py --name "Ali Rezaei" --code 9912345
+ب) از پوشه عکس (بدون وب‌کم): .venv\Scripts\python enroll.py --name "Sara M" --code 9912346 --images C:\photos\sara
+۲) حالت حضور و غیاب زنده (دوربین باز بماند) : .venv\Scripts\python monitor.py
+.venv\Scripts\python monitor.py --threshold 0.35        # سخت‌گیرتر/آسان‌تر (پیش‌فرض 0.4)
+.venv\Scripts\python monitor.py --absence-minutes 5     # خروج بعد از ۵ دقیقه غیبت
+.venv\Scripts\python monitor.py --camera 1 --fps 10     # دوربین دیگر، پردازش سریع‌تر
+
+.venv\Scripts\python monitor.py --camera 0
+.venv\Scripts\python monitor.py --camera 1
+
+۳) وب‌داشبورد (نمایش زنده + افزودن/ویرایش/حذف دانشجو) : .venv\Scripts\python dashboard.py
+     ساده‌ترین راه: دابل‌کلیک روی run-dashboard.bat (اگر خطای اتصال یا بنر قرمز دیدید یعنی سرور بسته است)
+     در پنل: دکمه «+ افزودن دانشجو» و دکمه‌های «ویرایش»/«حذف» در جدول دانشجویان — صفحه را با F5 تازه کنید تا منوی جدید بیاید
+     در فرم دانشجو «عکس دانشجو» هم هست: یا فایل عکس را بدهید (آپلود فایل عکس) یا «عکس با دوربین» را بزنید و همین‌جا عکس بگیرید. عکس در photos\ ذخیره می‌شود و چهره‌اش خودکار به گالری اضافه می‌شود، پس دانشجو بدون enroll.py هم شناسایی می‌شود (اگر پیام «چهره واضح پیدا نشد» داد، enroll.py را اجرا کنید)
+     بعد از افزودن دانشجو، monitor.py را یک‌بار restart کنید (فهرست را موقع شروع می‌خواند)
+     تاریخ‌ها شمسی‌اند؛ در پنل «ساعت مجاز ورود و خروج» بازه‌ها را تعیین کنید — رویداد بیرون از بازه «مشکوک» می‌خورد (چک‌باکس فعال‌سازی را بزنید)
+     پنل «گزارش اکسل آخر شب»: چک‌باکس ساخت خودکار + ساعت (پیش‌فرض ۲۳:۰۰). هر روز فایل reports\attendance_YYYY-MM-DD.xlsx ساخته می‌شود (حاضر/غایب، ساعت ورود و خروج، مدت حضور، رویداد مشکوک، نمودار ۱۴ روز کنار هر نفر + نمودارهای ساعتی/روند/دایره‌ای). اگر آن ساعت سیستم خاموش بوده، در اولین اجرای بعد جبران می‌شود. با «ساخت فایل همین الان» هم می‌توانید دستی بسازید؛ فایل‌های آماده در همان پنل لینک دانلود دارند. سرور باید باز باشد.
+۴) گزارش روزانه و اکسل/CSV : .venv\Scripts\python report.py                    # امروز
+.venv\Scripts\python report.py --date 2026-10-12  # روز مشخص
+.venv\Scripts\python export.py --date 2026-10-12  # فایل اکسل گزارش همان روز -> reports\
+
+۵) کارهای نگه‌داری
+ : .venv\Scripts\python -c "import database as db, engine; db.init_db(); [print(dict(s)) for s in db.list_students()]"
+.venv\Scripts\python -c "import engine; print(engine.remove_student(3))"
+
